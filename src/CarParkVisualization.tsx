@@ -169,7 +169,7 @@ const CarParkVisualization = () => {
       <div className="bg-gray-50 p-6 max-w-6xl mx-auto">
         <div className="bg-white p-4 rounded-lg shadow mb-4">
           <div className="flex items-center justify-between mb-2">
-            <h1 className="text-2xl font-bold">What-If Simulation Dashboard</h1>
+            <h1 className="text-2xl font-bold">Policy Simulation Dashboard</h1>
             <div className="bg-purple-100 border-2 border-purple-500 px-4 py-2 rounded-lg">
               <div className="flex items-center gap-2">
                 <span className="text-2xl">🧪</span>
@@ -645,7 +645,7 @@ const CarParkVisualization = () => {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            🧪 What-If Simulation
+            🧪 Policy Simulation
           </button>
           <button
             onClick={() => setView('dashboard')}
