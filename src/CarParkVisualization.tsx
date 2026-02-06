@@ -2,6 +2,8 @@ import { useState } from "react";
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -164,256 +166,362 @@ const CarParkVisualization = () => {
   );
 
   const WhatIfSimulation = () => {
-    const [site] = useState("Marseille Euromed");
-    const [dateRange] = useState("Feb 10–16, 2026");
-    const [includeEvents, setIncludeEvents] = useState(true);
-    const [testPriceChange, setTestPriceChange] = useState<number>(15);
+  const [site] = useState("Marseille Euromed");
+  const [dateRange] = useState("Feb 10–16, 2026");
+  const [includeEvents, setIncludeEvents] = useState(true);
+  const [testPriceChange, setTestPriceChange] = useState<number>(15);
 
-    // Simple “mock” results derived from sliders so it feels interactive
-    const revenuePerSpace = (4.67 + (bookingLimit - 20) * 0.02 + (90 - driveUpThreshold) * 0.01).toFixed(2);
-    const occ = Math.max(65, Math.min(95, 75 + (bookingLimit - 20) * 0.2 - (driveUpThreshold - 85) * 0.15));
-    const turnaways = Math.max(0, Math.round(45 - (bookingLimit - 20) * 0.8 - (subscriberBuffer - 10) * 0.3));
+  // NEW: toggle for stacked bar chart
+  const [mixMode, setMixMode] = useState<"current" | "optimized">("current");
 
-    // Chart data (also reacts a bit to the sliders)
-    const bump = Math.max(-5, Math.min(10, Math.round((bookingLimit - 25) * 0.4 + (90 - driveUpThreshold) * 0.2)));
-    const chartData = [
-      { time: "8am", current: 50, optimized: 52 + bump },
-      { time: "10am", current: 75, optimized: 80 + bump },
-      { time: "12pm", current: 78, optimized: 82 + bump },
-      { time: "2pm", current: 76, optimized: 80 + bump },
-      { time: "4pm", current: 68, optimized: 72 + bump },
-      { time: "6pm", current: 55, optimized: 58 + bump },
-    ];
+  // Simple “mock” results derived from sliders so it feels interactive
+  const revenuePerSpace = (
+    4.67 +
+    (bookingLimit - 20) * 0.02 +
+    (90 - driveUpThreshold) * 0.01
+  ).toFixed(2);
 
-    const handleRunSimulation = () => {
-      console.log("Run Simulation:", {
-        site,
-        dateRange,
-        includeEvents,
-        bookingLimit,
-        driveUpThreshold,
-        subscriberBuffer,
-        testPriceChange,
-      });
+  const occ = Math.max(
+    65,
+    Math.min(95, 75 + (bookingLimit - 20) * 0.2 - (driveUpThreshold - 85) * 0.15)
+  );
+
+  const turnaways = Math.max(
+    0,
+    Math.round(45 - (bookingLimit - 20) * 0.8 - (subscriberBuffer - 10) * 0.3)
+  );
+
+  // Line chart data (reacts a bit to sliders)
+  const bump = Math.max(
+    -5,
+    Math.min(10, Math.round((bookingLimit - 25) * 0.4 + (90 - driveUpThreshold) * 0.2))
+  );
+
+  const chartData = [
+    { time: "8am", current: 50, optimized: 52 + bump },
+    { time: "10am", current: 75, optimized: 80 + bump },
+    { time: "12pm", current: 78, optimized: 82 + bump },
+    { time: "2pm", current: 76, optimized: 80 + bump },
+    { time: "4pm", current: 68, optimized: 72 + bump },
+    { time: "6pm", current: 55, optimized: 58 + bump },
+  ];
+
+  // --- NEW: Stacked bar data for customer mix ---
+  const mixCurrent = [
+    { time: "8am", subscriber: 30, booking: 15, driveUp: 5 },
+    { time: "10am", subscriber: 45, booking: 20, driveUp: 10 },
+    { time: "12pm", subscriber: 48, booking: 20, driveUp: 10 },
+    { time: "2pm", subscriber: 46, booking: 20, driveUp: 10 },
+    { time: "4pm", subscriber: 40, booking: 18, driveUp: 10 },
+    { time: "6pm", subscriber: 33, booking: 15, driveUp: 7 },
+  ];
+
+  // Make "optimized" mix respond to sliders (still mock, but interactive)
+  const deltaBooking = Math.round((bookingLimit - 25) * 0.5);     // ↑ bookingLimit -> ↑ bookings
+  const deltaDrive = Math.round((90 - driveUpThreshold) * 0.3);   // ↓ threshold -> ↓ drive-ups
+  const deltaSub = Math.round((subscriberBuffer - 10) * 0.4);     // ↑ buffer -> ↑ subscriber
+
+  const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+
+  const mixOptimized = mixCurrent.map((d) => {
+    // Apply deltas
+    let subscriber = d.subscriber + deltaSub;
+    let booking = d.booking + deltaBooking;
+    let driveUp = d.driveUp - deltaDrive;
+
+    // Clamp to keep sensible values
+    subscriber = clamp(subscriber, 0, 100);
+    booking = clamp(booking, 0, 100);
+    driveUp = clamp(driveUp, 0, 100);
+
+    // Keep total constant (normalize back to original total)
+    const total0 = d.subscriber + d.booking + d.driveUp;
+    const total1 = subscriber + booking + driveUp || 1;
+
+    return {
+      time: d.time,
+      subscriber: Math.round((subscriber / total1) * total0),
+      booking: Math.round((booking / total1) * total0),
+      driveUp: Math.round((driveUp / total1) * total0),
     };
+  });
 
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="bg-white rounded-lg shadow-lg border-4 border-purple-700 overflow-hidden">
-            {/* Header */}
-            <div className="bg-purple-100 border-b-4 border-purple-700 p-6">
-              <h1 className="text-3xl font-bold text-purple-900 text-center">
-                Policy Simulation Dashboard (Scenario Mode)
-              </h1>
-              <p className="text-center text-sm text-purple-800 mt-2">
-                Test policy settings and compare Current vs Optimized outcomes (mock outputs)
-              </p>
-            </div>
+  const handleRunSimulation = () => {
+    console.log("Run Simulation:", {
+      site,
+      dateRange,
+      includeEvents,
+      bookingLimit,
+      driveUpThreshold,
+      subscriberBuffer,
+      testPriceChange,
+      mixMode,
+    });
+  };
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
-              {/* Controls */}
-              <div className="lg:col-span-1 border-r-4 border-purple-700">
-                <div className="bg-purple-700 text-white p-4">
-                  <h2 className="text-2xl font-bold">User Controls</h2>
-                </div>
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-white rounded-lg shadow-lg border-4 border-purple-700 overflow-hidden">
+          {/* Header */}
+          <div className="bg-purple-100 border-b-4 border-purple-700 p-6">
+            <h1 className="text-3xl font-bold text-purple-900 text-center">
+              Policy Simulation Dashboard (Scenario Mode)
+            </h1>
+            <p className="text-center text-sm text-purple-800 mt-2">
+              Test policy settings and compare Current vs Optimized outcomes (mock outputs)
+            </p>
+          </div>
 
-                <div className="p-6 space-y-6">
-                  <div>
-                    <label className="block text-sm font-semibold mb-2">
-                      Site: <span className="font-normal">{site}</span>
-                    </label>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold mb-2">
-                      Dates: <span className="font-normal">{dateRange}</span>
-                      <span className="ml-2 text-xl">▼</span>
-                    </label>
-                  </div>
-
-                  <div>
-                    <label className="flex items-center text-sm font-semibold">
-                      Events:
-                      <input
-                        type="checkbox"
-                        checked={includeEvents}
-                        onChange={(e) => setIncludeEvents(e.target.checked)}
-                        className="ml-2 w-5 h-5"
-                      />
-                      <span className="ml-2 font-normal">Include</span>
-                    </label>
-                  </div>
-
-                  {/* Policy Settings */}
-                  <div className="pt-4">
-                    <h3 className="text-lg font-bold text-purple-700 mb-4">Policy Settings:</h3>
-
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex justify-between mb-2">
-                          <label className="text-sm font-medium">Booking Limit (%)</label>
-                          <span className="text-sm font-bold text-blue-600">{bookingLimit}%</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="15"
-                          max="40"
-                          value={bookingLimit}
-                          onChange={(e) => setBookingLimit(Number(e.target.value))}
-                          className="w-full"
-                        />
-                        <div className="text-xs text-gray-500 mt-1">
-                          Max % of capacity available for advance bookings
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between mb-2">
-                          <label className="text-sm font-medium">Drive-up Threshold (%)</label>
-                          <span className="text-sm font-bold text-green-600">{driveUpThreshold}%</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="70"
-                          max="95"
-                          value={driveUpThreshold}
-                          onChange={(e) => setDriveUpThreshold(Number(e.target.value))}
-                          className="w-full"
-                        />
-                        <div className="text-xs text-gray-500 mt-1">
-                          Occupancy level at which to restrict drive-ups
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between mb-2">
-                          <label className="text-sm font-medium">Subscriber Buffer (%)</label>
-                          <span className="text-sm font-bold text-purple-600">{subscriberBuffer}%</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="5"
-                          max="20"
-                          value={subscriberBuffer}
-                          onChange={(e) => setSubscriberBuffer(Number(e.target.value))}
-                          className="w-full"
-                        />
-                        <div className="text-xs text-gray-500 mt-1">
-                          Reserved capacity buffer for subscriber guarantees
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Pricing Optional */}
-                  <div className="pt-4">
-                    <h3 className="text-lg font-bold text-purple-700 mb-4">Pricing (Optional):</h3>
-                    <div className="flex items-center">
-                      <label className="text-sm font-medium mr-2">Test Price Change:</label>
-                      <span className="mr-2">[</span>
-                      <input
-                        type="number"
-                        value={testPriceChange}
-                        onChange={(e) => setTestPriceChange(Number(e.target.value))}
-                        className="w-16 px-2 py-1 border border-gray-300 rounded text-center"
-                      />
-                      <span className="ml-2">] %</span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleRunSimulation}
-                    className="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold py-3 px-6 rounded mt-6 transition-colors"
-                  >
-                    [Run Simulation]
-                  </button>
-
-                  <div className="bg-yellow-50 border-l-4 border-yellow-500 p-3 text-xs">
-                    <strong>⚠️ Note:</strong> Scenario mode — outputs are mock values for presentation.
-                  </div>
-                </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+            {/* Controls */}
+            <div className="lg:col-span-1 border-r-4 border-purple-700">
+              <div className="bg-purple-700 text-white p-4">
+                <h2 className="text-2xl font-bold">User Controls</h2>
               </div>
 
-              {/* Results */}
-              <div className="lg:col-span-2">
-                <div className="bg-purple-700 text-white p-4">
-                  <h2 className="text-2xl font-bold">Simulation Results</h2>
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">
+                    Site: <span className="font-normal">{site}</span>
+                  </label>
                 </div>
 
-                <div className="p-6">
-                  {/* KPIs */}
-                  <div className="grid grid-cols-3 gap-4 mb-6">
-                    <div className="bg-purple-200 rounded-lg p-4">
-                      <div className="text-sm text-purple-900 mb-1">Revenue/Space</div>
-                      <div className="text-3xl font-bold text-purple-900">€{revenuePerSpace}</div>
-                      <div className="text-sm text-pink-600 font-semibold">vs €4.67 baseline</div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2">
+                    Dates: <span className="font-normal">{dateRange}</span>
+                    <span className="ml-2 text-xl">▼</span>
+                  </label>
+                </div>
+
+                <div>
+                  <label className="flex items-center text-sm font-semibold">
+                    Events:
+                    <input
+                      type="checkbox"
+                      checked={includeEvents}
+                      onChange={(e) => setIncludeEvents(e.target.checked)}
+                      className="ml-2 w-5 h-5"
+                    />
+                    <span className="ml-2 font-normal">Include</span>
+                  </label>
+                </div>
+
+                {/* Policy Settings */}
+                <div className="pt-4">
+                  <h3 className="text-lg font-bold text-purple-700 mb-4">Policy Settings:</h3>
+
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between mb-2">
+                        <label className="text-sm font-medium">Booking Limit (%)</label>
+                        <span className="text-sm font-bold text-blue-600">{bookingLimit}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="15"
+                        max="40"
+                        value={bookingLimit}
+                        onChange={(e) => setBookingLimit(Number(e.target.value))}
+                        className="w-full"
+                      />
+                      <div className="text-xs text-gray-500 mt-1">
+                        Max % of capacity available for advance bookings
+                      </div>
                     </div>
 
-                    <div className="bg-purple-200 rounded-lg p-4">
-                      <div className="text-sm text-purple-900 mb-1">Occupancy</div>
-                      <div className="text-3xl font-bold text-purple-900">{Math.round(occ)}%</div>
-                      <div className="text-sm text-pink-600 font-semibold">vs 75% baseline</div>
+                    <div>
+                      <div className="flex justify-between mb-2">
+                        <label className="text-sm font-medium">Drive-up Threshold (%)</label>
+                        <span className="text-sm font-bold text-green-600">{driveUpThreshold}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="70"
+                        max="95"
+                        value={driveUpThreshold}
+                        onChange={(e) => setDriveUpThreshold(Number(e.target.value))}
+                        className="w-full"
+                      />
+                      <div className="text-xs text-gray-500 mt-1">
+                        Occupancy level at which to restrict drive-ups
+                      </div>
                     </div>
 
-                    <div className="bg-purple-200 rounded-lg p-4">
-                      <div className="text-sm text-purple-900 mb-1">Turnaways</div>
-                      <div className="text-3xl font-bold text-purple-900">{turnaways}</div>
-                      <div className="text-sm text-pink-600 font-semibold">vs 45 baseline</div>
+                    <div>
+                      <div className="flex justify-between mb-2">
+                        <label className="text-sm font-medium">Subscriber Buffer (%)</label>
+                        <span className="text-sm font-bold text-purple-600">{subscriberBuffer}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="5"
+                        max="20"
+                        value={subscriberBuffer}
+                        onChange={(e) => setSubscriberBuffer(Number(e.target.value))}
+                        className="w-full"
+                      />
+                      <div className="text-xs text-gray-500 mt-1">
+                        Reserved capacity buffer for subscriber guarantees
+                      </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Chart */}
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="time" />
-                        <YAxis domain={[0, 100]} />
-                        <Tooltip />
-                        <Legend />
-                        <Line
-                          type="monotone"
-                          dataKey="current"
-                          stroke="#6B7280"
-                          strokeWidth={3}
-                          name="Current Policy"
-                          dot={{ fill: "#6B7280", r: 5 }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="optimized"
-                          stroke="#DB2777"
-                          strokeWidth={3}
-                          name="Optimized Policy"
-                          dot={{ fill: "#DB2777", r: 5 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-
-                    <div className="mt-3 text-xs text-gray-600">
-                      Policy changes shift the occupancy curve while staying inside the optimal band.
-                    </div>
+                {/* Pricing Optional */}
+                <div className="pt-4">
+                  <h3 className="text-lg font-bold text-purple-700 mb-4">Pricing (Optional):</h3>
+                  <div className="flex items-center">
+                    <label className="text-sm font-medium mr-2">Test Price Change:</label>
+                    <span className="mr-2">[</span>
+                    <input
+                      type="number"
+                      value={testPriceChange}
+                      onChange={(e) => setTestPriceChange(Number(e.target.value))}
+                      className="w-16 px-2 py-1 border border-gray-300 rounded text-center"
+                    />
+                    <span className="ml-2">] %</span>
                   </div>
+                </div>
 
-                  {/* Footer note */}
-                  <div className="mt-4 bg-gray-100 border-l-4 border-purple-700 p-3 text-sm">
-                    <strong>Interpretation:</strong> Optimized policy smooths peak demand by reallocating capacity to higher-value arrivals.
-                  </div>
+                <button
+                  onClick={handleRunSimulation}
+                  className="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold py-3 px-6 rounded mt-6 transition-colors"
+                >
+                  [Run Simulation]
+                </button>
+
+                <div className="bg-yellow-50 border-l-4 border-yellow-500 p-3 text-xs">
+                  <strong>⚠️ Note:</strong> Scenario mode — outputs are mock values for presentation.
                 </div>
               </div>
             </div>
 
-            <div className="bg-gray-100 border-t-4 border-purple-700 p-4 text-center">
-              <p className="text-gray-700 italic">
-                This is what operations managers will use to test policy changes before deployment
-              </p>
+            {/* Results */}
+            <div className="lg:col-span-2">
+              <div className="bg-purple-700 text-white p-4">
+                <h2 className="text-2xl font-bold">Simulation Results</h2>
+              </div>
+
+              <div className="p-6">
+                {/* KPIs */}
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="bg-purple-200 rounded-lg p-4">
+                    <div className="text-sm text-purple-900 mb-1">Revenue/Space</div>
+                    <div className="text-3xl font-bold text-purple-900">€{revenuePerSpace}</div>
+                    <div className="text-sm text-pink-600 font-semibold">vs €4.67 baseline</div>
+                  </div>
+
+                  <div className="bg-purple-200 rounded-lg p-4">
+                    <div className="text-sm text-purple-900 mb-1">Occupancy</div>
+                    <div className="text-3xl font-bold text-purple-900">{Math.round(occ)}%</div>
+                    <div className="text-sm text-pink-600 font-semibold">vs 75% baseline</div>
+                  </div>
+
+                  <div className="bg-purple-200 rounded-lg p-4">
+                    <div className="text-sm text-purple-900 mb-1">Turnaways</div>
+                    <div className="text-3xl font-bold text-purple-900">{turnaways}</div>
+                    <div className="text-sm text-pink-600 font-semibold">vs 45 baseline</div>
+                  </div>
+                </div>
+
+                {/* Occupancy Line Chart */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="time" />
+                      <YAxis domain={[0, 100]} />
+                      <Tooltip />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="current"
+                        stroke="#6B7280"
+                        strokeWidth={3}
+                        name="Current Policy"
+                        dot={{ fill: "#6B7280", r: 5 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="optimized"
+                        stroke="#DB2777"
+                        strokeWidth={3}
+                        name="Optimized Policy"
+                        dot={{ fill: "#DB2777", r: 5 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+
+                  <div className="mt-3 text-xs text-gray-600">
+                    Policy changes shift the occupancy curve while staying inside the optimal band.
+                  </div>
+                </div>
+
+                {/* NEW: Customer Mix Stacked Bar Chart */}
+                <div className="bg-gray-50 p-4 rounded-lg mt-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-800">Customer Mix by Hour</h3>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setMixMode("current")}
+                        className={`px-3 py-1 rounded text-xs font-semibold ${
+                          mixMode === "current"
+                            ? "bg-gray-700 text-white"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        }`}
+                      >
+                        Current
+                      </button>
+                      <button
+                        onClick={() => setMixMode("optimized")}
+                        className={`px-3 py-1 rounded text-xs font-semibold ${
+                          mixMode === "optimized"
+                            ? "bg-pink-600 text-white"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        }`}
+                      >
+                        Optimized
+                      </button>
+                    </div>
+                  </div>
+
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={mixMode === "current" ? mixCurrent : mixOptimized}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="time" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="subscriber" stackId="a" fill="#7C3AED" name="Subscriber" />
+                      <Bar dataKey="booking" stackId="a" fill="#3B82F6" name="Booking" />
+                      <Bar dataKey="driveUp" stackId="a" fill="#10B981" name="Drive-up" />
+                    </BarChart>
+                  </ResponsiveContainer>
+
+                  <div className="mt-2 text-xs text-gray-600">
+                    Toggle to compare how policy changes shift capacity between subscriber / booking / drive-up.
+                  </div>
+                </div>
+
+                {/* Footer note */}
+                <div className="mt-4 bg-gray-100 border-l-4 border-purple-700 p-3 text-sm">
+                  <strong>Interpretation:</strong> Optimized policy smooths peak demand by reallocating capacity to higher-value arrivals.
+                </div>
+              </div>
             </div>
+          </div>
+
+          <div className="bg-gray-100 border-t-4 border-purple-700 p-4 text-center">
+            <p className="text-gray-700 italic">
+              This is what operations managers will use to test policy changes before deployment
+            </p>
           </div>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   const Dashboard = () => (
     <div className="bg-gray-50 p-6 max-w-6xl mx-auto">
