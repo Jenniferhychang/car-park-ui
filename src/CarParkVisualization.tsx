@@ -392,7 +392,7 @@ const CarParkVisualization = () => {
                     </ResponsiveContainer>
 
                     <div className="mt-3 text-xs text-gray-600">
-                      Tip: Use this slide to explain “policy changes shift the occupancy curve while staying inside the optimal band.”
+                      Policy changes shift the occupancy curve while staying inside the optimal band.
                     </div>
                   </div>
 
